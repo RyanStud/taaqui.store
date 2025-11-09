@@ -241,6 +241,24 @@
             background-color: #45a049;
         }
 
+        /* Status do formulário */
+        .form-status {
+            margin-top: 12px;
+            font-size: 14px;
+            padding: 10px 12px;
+            border-radius: 6px;
+        }
+        .form-status.success {
+            background: #e8f5e9;
+            color: #1b5e20;
+            border: 1px solid #a5d6a7;
+        }
+        .form-status.error {
+            background: #ffebee;
+            color: #b71c1c;
+            border: 1px solid #ef9a9a;
+        }
+
         /* Carousel de Tecnologias */
         .tech-carousel {
             position: relative;
@@ -554,12 +572,13 @@
                 Interessado em nossas soluções? Preencha o formulário abaixo e nossa equipe 
                 entrará em contato o mais breve possível!
             </p>
-            <form class="contato-form" onsubmit="return handleSubmit(event)">
+            <form id="contactForm" class="contato-form" onsubmit="return handleSubmit(event)">
                 <input type="text" name="nome" placeholder="Seu Nome" required />
                 <input type="email" name="email" placeholder="Seu E-mail" required />
-                <input type="tel" name="telefone" placeholder="Seu Telefone" required />
+                <input type="tel" name="telefone" placeholder="Seu Telefone" />
                 <textarea name="mensagem" rows="5" placeholder="Sua Mensagem" required></textarea>
-                <button type="submit">Enviar Mensagem</button>
+                <button id="submitBtn" type="submit">Enviar Mensagem</button>
+                <div id="formStatus" class="form-status" style="display:none;" aria-live="polite"></div>
             </form>
         </section>
     </div>
@@ -584,11 +603,56 @@
             });
         });
 
-        // Função para lidar com o envio do formulário
-        function handleSubmit(event) {
+        // Função para lidar com o envio do formulário (integração com Supabase Edge Function)
+        async function handleSubmit(event) {
             event.preventDefault();
-            alert('Obrigado pelo contato! Em breve nossa equipe entrará em contato com você.');
-            event.target.reset();
+
+            const API_URL = 'https://ttxolzpufannnebdbvaj.supabase.co/functions/v1/webhooksalvacontato';
+            const API_KEY = 'masqueico';
+
+            const form = event.target;
+            const submitBtn = document.getElementById('submitBtn');
+            const statusBox = document.getElementById('formStatus');
+
+            const nome = form.nome.value.trim();
+            const email = form.email.value.trim();
+            const telefone = (form.telefone.value || '').trim();
+            const mensagem = form.mensagem.value.trim();
+
+            // Feedback inicial
+            statusBox.style.display = 'block';
+            statusBox.className = 'form-status';
+            statusBox.textContent = 'Enviando...';
+            submitBtn.disabled = true;
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': API_KEY
+                    },
+                    body: JSON.stringify({ nome, email, telefone, mensagem })
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok || data.error) {
+                    const msg = (data && (data.message || data.error)) || 'Falha no envio.';
+                    statusBox.className = 'form-status error';
+                    statusBox.textContent = `Erro: ${msg}`;
+                } else {
+                    statusBox.className = 'form-status success';
+                    statusBox.textContent = 'Contato enviado com sucesso! Em breve entraremos em contato.';
+                    form.reset();
+                }
+            } catch (err) {
+                statusBox.className = 'form-status error';
+                statusBox.textContent = 'Erro de rede ao enviar. Verifique sua conexão e tente novamente.';
+            } finally {
+                submitBtn.disabled = false;
+            }
+
             return false;
         }
 
